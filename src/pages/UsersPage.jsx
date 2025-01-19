@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Table,
@@ -15,35 +15,238 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormGroup,
-  FormControlLabel,
-  Checkbox,
-  Typography
+  MenuItem,
+  Grid,
+  Typography,
+  Chip,
+  Alert,
+  DialogContentText,
+  Snackbar,
+  CircularProgress
 } from '@mui/material';
-import { Edit as EditIcon, Block as BlockIcon, LockOpen as LockOpenIcon } from '@mui/icons-material';
+import { 
+  Edit as EditIcon, 
+  Block as BlockIcon, 
+  LockOpen as LockOpenIcon,
+  Visibility as VisibilityIcon,
+  Delete as DeleteIcon 
+} from '@mui/icons-material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import PageBackground from '../components/PageBackground';
+import NewUserModal from '../components/NewUserModal';
+import dayjs from 'dayjs';
+import { DATABASE_URL } from '../config/config';
 
 const UsersPage = () => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
+  const [dialogMode, setDialogMode] = useState('create'); // 'create', 'edit', 'view'
   const [selectedUser, setSelectedUser] = useState(null);
+  const [openBlockDialog, setOpenBlockDialog] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+  const [formData, setFormData] = useState({
+    name: '',
+    lastName: '',
+    documentNamber: '',
+    documentType: 'DNI',
+    numberPhone: '',
+    startDate: null,
+    endDate: null,
+    email: '',
+    backupEmail: '',
+    collaboratorTypeId: 1,
+    organizationId: 1
+  });
 
-  const roles = ['Admin', 'Editor', 'Viewer'];
-  const users = [
-    { id: 1, name: 'Usuario 1', email: 'usuario1@ejemplo.com', roles: ['Admin'], status: 'active' },
-    { id: 2, name: 'Usuario 2', email: 'usuario2@ejemplo.com', roles: ['Editor'], status: 'inactive' },
-  ];
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const accessToken = localStorage.getItem('accessToken');
+      
+      if (!accessToken) {
+        throw new Error('No se encontró el token de acceso');
+      }
 
-  const handleEdit = (user) => {
+      const response = await fetch(`${DATABASE_URL}/api/Collaborator/29`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al obtener el usuario');
+      }
+
+      const user = await response.json();
+      console.log('Usuario obtenido:', user);
+      
+      setUsers([user]);
+    } catch (error) {
+      console.error('Error al obtener usuario:', error);
+      setSnackbar({
+        open: true,
+        message: error.message,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleOpenDialog = (mode, user = null) => {
+    setDialogMode(mode);
     setSelectedUser(user);
     setOpenDialog(true);
   };
 
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setSelectedUser(null);
+  };
+
+  const getStatusChip = (status) => {
+    const statusConfig = {
+      1: { label: 'Activo', color: 'success' },
+      2: { label: 'Inactivo', color: 'error' },
+      3: { label: 'Bloqueado', color: 'warning' }
+    };
+    const config = statusConfig[status] || statusConfig[2];
+    return <Chip label={config.label} color={config.color} size="small" />;
+  };
+
+  // Funciones para manejar acciones
+  const handleBlockUser = (user) => {
+    setSelectedUser(user);
+    setOpenBlockDialog(true);
+  };
+
+  const handleDeleteUser = (user) => {
+    setSelectedUser(user);
+    setOpenDeleteDialog(true);
+  };
+
+  const handlePasswordChange = (user) => {
+    setSelectedUser(user);
+    setOpenPasswordDialog(true);
+  };
+
+  const handleConfirmBlock = () => {
+    // Aquí iría la lógica para bloquear/desbloquear
+    setSnackbar({
+      open: true,
+      message: `Usuario ${selectedUser.state === 1 ? 'bloqueado' : 'desbloqueado'} exitosamente`,
+      severity: 'success'
+    });
+    setOpenBlockDialog(false);
+  };
+
+  const handleConfirmDelete = () => {
+    // Aquí iría la lógica para eliminar
+    setSnackbar({
+      open: true,
+      message: 'Usuario eliminado exitosamente',
+      severity: 'success'
+    });
+    setOpenDeleteDialog(false);
+  };
+
+  const handleConfirmPasswordChange = () => {
+    // Aquí iría la lógica para cambiar la contraseña
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setSnackbar({
+        open: true,
+        message: 'Las contraseñas no coinciden',
+        severity: 'error'
+      });
+      return;
+    }
+    setSnackbar({
+      open: true,
+      message: 'Contraseña actualizada exitosamente',
+      severity: 'success'
+    });
+    setOpenPasswordDialog(false);
+    setPasswordData({
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    });
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleDateChange = (date, field) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: date ? dayjs(date).format('YYYY-MM-DDTHH:mm:ss.SSSZ') : null
+    }));
+  };
+
+  const handleSubmit = async (formData) => {
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        throw new Error('No se encontró el token de acceso');
+      }
+
+      const response = await fetch(`${DATABASE_URL}/api/Collaborator`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al crear el usuario');
+      }
+
+      setSnackbar({
+        open: true,
+        message: 'Usuario creado exitosamente',
+        severity: 'success'
+      });
+
+      fetchUsers(); // Actualizar la lista después de crear
+      handleCloseDialog();
+    } catch (err) {
+      throw new Error(err.message || 'Error al crear el usuario');
+    }
+  };
+
   return (
-    <Box>
+    <Box className="relative">
+      <PageBackground />
       <Typography 
         variant="h4" 
         sx={{ 
           mb: 4,
-          background: 'linear-gradient(to right, #6366f1, #a855f7)',
+          background: 'linear-gradient(to right, #9333ea, #ec4899)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           fontWeight: 'bold'
@@ -54,12 +257,12 @@ const UsersPage = () => {
 
       <Button 
         variant="contained" 
-        onClick={() => handleEdit(null)} 
+        onClick={() => handleOpenDialog('create')}
         sx={{ 
           mb: 3,
-          background: 'linear-gradient(to right, #6366f1, #a855f7)',
+          background: 'linear-gradient(to right, #9333ea, #ec4899)',
           '&:hover': {
-            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+            background: 'linear-gradient(to right, #7e22ce, #db2777)',
           }
         }}
       >
@@ -81,154 +284,150 @@ const UsersPage = () => {
             <TableRow>
               <TableCell>Nombre</TableCell>
               <TableCell>Email</TableCell>
-              <TableCell>Roles</TableCell>
+              <TableCell>Teléfono</TableCell>
+              <TableCell>Documento</TableCell>
+              <TableCell>Fecha Inicio</TableCell>
               <TableCell>Estado</TableCell>
               <TableCell>Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.roles.join(', ')}</TableCell>
-                <TableCell>
-                  <Box
-                    sx={{
-                      px: 2,
-                      py: 0.5,
-                      borderRadius: '50px',
-                      display: 'inline-block',
-                      bgcolor: user.status === 'active' ? 'rgba(99, 255, 132, 0.2)' : 'rgba(255, 99, 132, 0.2)',
-                      color: user.status === 'active' ? 'success.main' : 'error.main',
-                    }}
-                  >
-                    {user.status === 'active' ? 'Activo' : 'Inactivo'}
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <IconButton 
-                    onClick={() => handleEdit(user)}
-                    sx={{ color: '#6366f1' }}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton sx={{ color: '#ef4444' }}>
-                    <BlockIcon />
-                  </IconButton>
-                  <IconButton sx={{ color: '#10b981' }}>
-                    <LockOpenIcon />
-                  </IconButton>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={7} align="center">
+                  <CircularProgress />
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{`${user.name} ${user.lastName}`}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.numberPhone}</TableCell>
+                  <TableCell>{`${user.documentType} ${user.documentNamber}`}</TableCell>
+                  <TableCell>{dayjs(user.startDate).format('DD/MM/YYYY')}</TableCell>
+                  <TableCell>{getStatusChip(user.state)}</TableCell>
+                  <TableCell>
+                    <IconButton onClick={() => handleOpenDialog('view', user)}>
+                      <VisibilityIcon />
+                    </IconButton>
+                    <IconButton onClick={() => handleOpenDialog('edit', user)}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton 
+                      sx={{ color: user.state === 1 ? '#ef4444' : '#10b981' }}
+                    >
+                      {user.state === 1 ? <BlockIcon /> : <LockOpenIcon />}
+                    </IconButton>
+                    <IconButton>
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      <Dialog 
-        open={openDialog} 
-        onClose={() => setOpenDialog(false)}
-        PaperProps={{
-          sx: {
-            background: 'rgba(255, 255, 255, 0.9)',
-            backdropFilter: 'blur(12px)',
-            borderRadius: 2,
-            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-            border: '1px solid rgba(255, 255, 255, 0.18)',
-          }
-        }}
-      >
+      <NewUserModal
+        open={openDialog}
+        onClose={handleCloseDialog}
+        mode={dialogMode}
+        selectedUser={selectedUser}
+        onSubmit={handleSubmit}
+      />
+
+      {/* Modal de Bloquear/Desbloquear */}
+      <Dialog open={openBlockDialog} onClose={() => setOpenBlockDialog(false)}>
         <DialogTitle>
-          <Typography 
-            variant="h5"
-            sx={{ 
-              background: 'linear-gradient(to right, #6366f1, #a855f7)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              fontWeight: 'bold'
-            }}
-          >
-            {selectedUser ? 'Editar Usuario' : 'Nuevo Usuario'}
-          </Typography>
+          {selectedUser?.state === 1 ? 'Bloquear Usuario' : 'Desbloquear Usuario'}
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField 
-              label="Nombre" 
-              fullWidth
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '& fieldset': {
-                    borderColor: 'rgba(99, 102, 241, 0.2)',
-                  },
-                  '&:hover fieldset': {
-                    borderColor: 'rgba(99, 102, 241, 0.4)',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: '#6366f1',
-                  },
-                },
-              }}
-            />
-            <TextField 
-              label="Email" 
-              type="email" 
-              fullWidth
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '& fieldset': {
-                    borderColor: 'rgba(99, 102, 241, 0.2)',
-                  },
-                  '&:hover fieldset': {
-                    borderColor: 'rgba(99, 102, 241, 0.4)',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: '#6366f1',
-                  },
-                },
-              }}
-            />
-            <FormGroup>
-              {roles.map((role) => (
-                <FormControlLabel
-                  key={role}
-                  control={
-                    <Checkbox 
-                      sx={{
-                        color: '#6366f1',
-                        '&.Mui-checked': {
-                          color: '#6366f1',
-                        },
-                      }}
-                    />
-                  }
-                  label={role}
-                />
-              ))}
-            </FormGroup>
-          </Box>
+          <DialogContentText>
+            ¿Está seguro que desea {selectedUser?.state === 1 ? 'bloquear' : 'desbloquear'} a este usuario?
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => setOpenDialog(false)}
-            sx={{ color: '#6366f1' }}
-          >
-            Cancelar
-          </Button>
-          <Button 
-            variant="contained"
-            sx={{
-              background: 'linear-gradient(to right, #6366f1, #a855f7)',
-              '&:hover': {
-                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
-              }
-            }}
-          >
-            Guardar
+          <Button onClick={() => setOpenBlockDialog(false)}>Cancelar</Button>
+          <Button onClick={handleConfirmBlock} variant="contained" color="primary">
+            Confirmar
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Modal de Eliminar */}
+      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
+        <DialogTitle>Eliminar Usuario</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            ¿Está seguro que desea eliminar a este usuario? Esta acción no se puede deshacer.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)}>Cancelar</Button>
+          <Button onClick={handleConfirmDelete} variant="contained" color="error">
+            Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de Cambiar Contraseña */}
+      <Dialog open={openPasswordDialog} onClose={() => setOpenPasswordDialog(false)}>
+        <DialogTitle>Cambiar Contraseña</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                label="Contraseña Actual"
+                type="password"
+                fullWidth
+                value={passwordData.currentPassword}
+                onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label="Nueva Contraseña"
+                type="password"
+                fullWidth
+                value={passwordData.newPassword}
+                onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label="Confirmar Nueva Contraseña"
+                type="password"
+                fullWidth
+                value={passwordData.confirmPassword}
+                onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenPasswordDialog(false)}>Cancelar</Button>
+          <Button onClick={handleConfirmPasswordChange} variant="contained" color="primary">
+            Cambiar Contraseña
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar para mensajes */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({...snackbar, open: false})}
+      >
+        <Alert 
+          onClose={() => setSnackbar({...snackbar, open: false})} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

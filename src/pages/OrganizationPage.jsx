@@ -18,6 +18,7 @@ import {
   Typography
 } from '@mui/material';
 import { Edit as EditIcon } from '@mui/icons-material';
+import PageBackground from '../components/PageBackground';
 
 const OrganizationPage = () => {
   const [openDialog, setOpenDialog] = useState(false);
@@ -34,12 +35,13 @@ const OrganizationPage = () => {
   };
 
   return (
-    <Box>
+    <Box className="relative">
+      <PageBackground />
       <Typography 
         variant="h4" 
         sx={{ 
           mb: 4,
-          background: 'linear-gradient(to right, #6366f1, #a855f7)',
+          background: 'linear-gradient(to right, #9333ea, #ec4899)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           fontWeight: 'bold'
@@ -53,9 +55,9 @@ const OrganizationPage = () => {
         onClick={() => handleEdit(null)} 
         sx={{ 
           mb: 3,
-          background: 'linear-gradient(to right, #6366f1, #a855f7)',
+          background: 'linear-gradient(to right, #9333ea, #ec4899)',
           '&:hover': {
-            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+            background: 'linear-gradient(to right, #7e22ce, #db2777)',
           }
         }}
       >
@@ -71,6 +73,7 @@ const OrganizationPage = () => {
           boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
           border: '1px solid rgba(255, 255, 255, 0.18)',
         }}
+        className="relative backdrop-blur-lg bg-white/80 dark:bg-gray-800/80"
       >
         <Table>
           <TableHead>
@@ -104,8 +107,6 @@ const OrganizationPage = () => {
       <Dialog 
         open={openDialog} 
         onClose={() => setOpenDialog(false)}
-        maxWidth="sm"
-        fullWidth
         PaperProps={{
           sx: {
             background: 'rgba(255, 255, 255, 0.9)',
@@ -113,7 +114,8 @@ const OrganizationPage = () => {
             borderRadius: 2,
             boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
             border: '1px solid rgba(255, 255, 255, 0.18)',
-          }
+          },
+          className: "backdrop-blur-lg bg-white/80 dark:bg-gray-800/80"
         }}
       >
         <DialogTitle>

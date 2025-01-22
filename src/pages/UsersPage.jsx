@@ -22,20 +22,23 @@ import {
   Alert,
   DialogContentText,
   Snackbar,
-  CircularProgress
+  CircularProgress,
+  Tooltip
 } from '@mui/material';
 import { 
   Edit as EditIcon, 
   Block as BlockIcon, 
   LockOpen as LockOpenIcon,
   Visibility as VisibilityIcon,
-  Delete as DeleteIcon 
+  Delete as DeleteIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import PageBackground from '../components/PageBackground';
 import NewUserModal from '../components/NewUserModal';
 import dayjs from 'dayjs';
 import { DATABASE_URL } from '../config/config';
+import { commonStyles } from '../styles/commonStyles';
 
 const UsersPage = () => {
   const [users, setUsers] = useState([]);
@@ -69,6 +72,8 @@ const UsersPage = () => {
     collaboratorTypeId: 1,
     organizationId: 1
   });
+  const [error, setError] = useState('');
+  const [openModal, setOpenModal] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -79,7 +84,7 @@ const UsersPage = () => {
         throw new Error('No se encontró el token de acceso');
       }
 
-      const response = await fetch(`${DATABASE_URL}/api/Collaborator/29`, {
+      const response = await fetch(`${DATABASE_URL}/api/Collaborator/GetAll`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -87,20 +92,14 @@ const UsersPage = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Error al obtener el usuario');
+        throw new Error('Error al obtener los usuarios');
       }
 
-      const user = await response.json();
-      console.log('Usuario obtenido:', user);
-      
-      setUsers([user]);
+      const data = await response.json();
+      setUsers(data);
     } catch (error) {
-      console.error('Error al obtener usuario:', error);
-      setSnackbar({
-        open: true,
-        message: error.message,
-        severity: 'error'
-      });
+      console.error('Error al obtener usuarios:', error);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -127,8 +126,13 @@ const UsersPage = () => {
       2: { label: 'Inactivo', color: 'error' },
       3: { label: 'Bloqueado', color: 'warning' }
     };
-    const config = statusConfig[status] || statusConfig[2];
-    return <Chip label={config.label} color={config.color} size="small" />;
+    return (
+      <Chip 
+        label={statusConfig[status]?.label || 'Desconocido'} 
+        color={statusConfig[status]?.color || 'default'}
+        size="small"
+      />
+    );
   };
 
   // Funciones para manejar acciones
@@ -239,100 +243,122 @@ const UsersPage = () => {
     }
   };
 
+  const handleCreate = () => {
+    handleOpenDialog('create');
+  };
+
+  const handleView = (user) => {
+    handleOpenDialog('view', user);
+  };
+
+  const handleEdit = (user) => {
+    handleOpenDialog('edit', user);
+  };
+
+  const handleDelete = (id) => {
+    handleDeleteUser({ id });
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
-    <Box className="relative">
+    <Box sx={commonStyles.pageContainer}>
       <PageBackground />
+      
       <Typography 
         variant="h4" 
-        sx={{ 
-          mb: 4,
-          background: 'linear-gradient(to right, #9333ea, #ec4899)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          fontWeight: 'bold'
-        }}
+        component="h1"
+        sx={commonStyles.pageTitle}
       >
         Gestión de Usuarios
       </Typography>
 
-      <Button 
-        variant="contained" 
-        onClick={() => handleOpenDialog('create')}
-        sx={{ 
-          mb: 3,
-          background: 'linear-gradient(to right, #9333ea, #ec4899)',
-          '&:hover': {
-            background: 'linear-gradient(to right, #7e22ce, #db2777)',
-          }
-        }}
+      <Button
+        variant="contained"
+        onClick={handleCreate}
+        startIcon={<AddIcon />}
+        sx={commonStyles.actionButton}
       >
         Nuevo Usuario
       </Button>
 
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 2, borderRadius: '8px' }}
+          onClose={() => setError('')}
+        >
+          {error}
+        </Alert>
+      )}
+
       <TableContainer 
-        component={Paper}
-        sx={{
-          background: 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(12px)',
-          borderRadius: 2,
-          boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-          border: '1px solid rgba(255, 255, 255, 0.18)',
-        }}
+        component={Paper} 
+        sx={commonStyles.tableContainer}
       >
-        <Table>
+        <Table sx={commonStyles.table}>
           <TableHead>
             <TableRow>
-              <TableCell>Nombre</TableCell>
+              <TableCell>Nombre y Apellido</TableCell>
               <TableCell>Email</TableCell>
               <TableCell>Teléfono</TableCell>
-              <TableCell>Documento</TableCell>
-              <TableCell>Fecha Inicio</TableCell>
+              <TableCell>Compañía</TableCell>
               <TableCell>Estado</TableCell>
-              <TableCell>Acciones</TableCell>
+              <TableCell align="right">Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <CircularProgress />
-                </TableCell>
-              </TableRow>
-            ) : (
-              users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{`${user.name} ${user.lastName}`}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.numberPhone}</TableCell>
-                  <TableCell>{`${user.documentType} ${user.documentNamber}`}</TableCell>
-                  <TableCell>{dayjs(user.startDate).format('DD/MM/YYYY')}</TableCell>
-                  <TableCell>{getStatusChip(user.state)}</TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleOpenDialog('view', user)}>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{`${user.name} ${user.lastName}`}</TableCell>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>{user.numberPhone}</TableCell>
+                <TableCell>{user.organization?.name}Saraza</TableCell> 
+                <TableCell>{getStatusChip(user.state)}</TableCell>
+                <TableCell align="right">
+                  <Tooltip title="Ver detalles">
+                    <IconButton 
+                      size="small"
+                      onClick={() => handleView(user)}
+                      sx={commonStyles.actionIcons.view}
+                    >
                       <VisibilityIcon />
                     </IconButton>
-                    <IconButton onClick={() => handleOpenDialog('edit', user)}>
+                  </Tooltip>
+                  <Tooltip title="Editar usuario">
+                    <IconButton 
+                      size="small"
+                      onClick={() => handleEdit(user)}
+                      sx={commonStyles.actionIcons.edit}
+                    >
                       <EditIcon />
                     </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Eliminar usuario">
                     <IconButton 
-                      sx={{ color: user.state === 1 ? '#ef4444' : '#10b981' }}
+                      size="small"
+                      onClick={() => handleDelete(user.id)}
+                      sx={commonStyles.actionIcons.delete}
                     >
-                      {user.state === 1 ? <BlockIcon /> : <LockOpenIcon />}
-                    </IconButton>
-                    <IconButton>
                       <DeleteIcon />
                     </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </TableContainer>
 
       <NewUserModal
-        open={openDialog}
-        onClose={handleCloseDialog}
+        open={openModal}
+        onClose={() => setOpenModal(false)}
         mode={dialogMode}
         selectedUser={selectedUser}
         onSubmit={handleSubmit}

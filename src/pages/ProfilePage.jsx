@@ -19,9 +19,12 @@ import {
 import PageBackground from '../components/PageBackground';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import { DATABASE_URL } from '../config/config';
+import LockIcon from '@mui/icons-material/Lock';
+import { commonStyles } from '../styles/commonStyles';
 
 const ProfilePage = () => {
   const [userData, setUserData] = useState(null);
+  const [userRole, setUserRole] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
@@ -52,36 +55,30 @@ const ProfilePage = () => {
           throw new Error('No se encontraron los tokens de autenticación');
         }
 
-        // Usar el ID directamente
-        const profileUrl = `${DATABASE_URL}/api/Collaborator/29`;
+        // Obtener rol del accessToken
+        const accessTokenPayload = JSON.parse(atob(accessToken.split('.')[1]));
+        const role = accessTokenPayload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+        setUserRole(role);
 
-        const profileResponse = await fetch(profileUrl, {
-          method: 'GET',
+        // Obtener ID del usuario del idToken
+        const idTokenPayload = JSON.parse(atob(idToken.split('.')[1]));
+        const userId = idTokenPayload.idUser;
+
+        const response = await fetch(`${DATABASE_URL}/api/Collaborator/${userId}`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
-            'Accept': 'application/json',
             'Content-Type': 'application/json'
           }
         });
 
-        if (!profileResponse.ok) {
-          const errorText = await profileResponse.text();
-          try {
-            const errorData = JSON.parse(errorText);
-            throw new Error(errorData.message || 'Error al obtener datos del usuario');
-          } catch (e) {
-            throw new Error('Error al obtener datos del usuario');
-          }
+        if (!response.ok) {
+          throw new Error('Error al obtener los datos del perfil');
         }
 
-        const data = await profileResponse.json();
-        if (!data) {
-          throw new Error('No se recibieron datos del usuario');
-        }
-
+        const data = await response.json();
         setUserData(data);
       } catch (error) {
-        setError(error.message || 'Error al cargar los datos del usuario');
+        setError(error.message);
       } finally {
         setLoading(false);
       }
@@ -184,43 +181,58 @@ const ProfilePage = () => {
   const handleSubmit = async () => {
     try {
       const accessToken = localStorage.getItem('accessToken');
+      const idToken = localStorage.getItem('idToken');
       
-      if (!accessToken) {
-        throw new Error('No se encontró el token de autenticación');
+      if (!accessToken || !idToken) {
+        throw new Error('No se encontraron los tokens de autenticación');
       }
 
-      // Crear el objeto de datos a enviar
-      const dataToSend = {
-        ...userData,
-        ...editedData
+      // Obtener ID del usuario del idToken
+      const tokenPayload = JSON.parse(atob(idToken.split('.')[1]));
+      const userId = tokenPayload.idUser;
+
+      // Crear objeto con los datos actualizados
+      const updatedData = {
+        id: userData.id,
+        name: userData.name,
+        lastName: userData.lastName,
+        documentNumber: userData.documentNumber || userData.documentNamber, // Manejar ambos nombres de campo
+        documentType: userData.documentType,
+        numberPhone: editedData.numberPhone,
+        email: editedData.email,
+        backupEmail: editedData.backupEmail,
+        photo: userData.photo,
+        startDate: userData.startDate,
+        endDate: userData.endDate,
+        state: userData.state,
+        collaboratorTypeId: userData.collaboratorTypeId,
+        organizationId: userData.organizationId,
+        roleId: userData.roleId || userData.role?.id, // Enviar solo el ID del rol
+        userId: userData.userId
       };
 
-      const response = await fetch(`${DATABASE_URL}/api/Collaborator/27`, {
+
+      const response = await fetch(`${DATABASE_URL}/api/Collaborator/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(dataToSend)
+        body: JSON.stringify(updatedData)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Status:', response.status);
-        console.error('Response:', errorText);
-        try {
-          const errorData = JSON.parse(errorText);
-          throw new Error(errorData.message || 'Error al actualizar el perfil');
-        } catch (e) {
-          throw new Error(`Error al actualizar el perfil. Status: ${response.status}`);
-        }
+        console.log('Response:', errorText);
+        throw new Error(`Error al actualizar el perfil. Status: ${response.status}`);
       }
 
-      // Si la respuesta está vacía pero fue exitosa (status 200-299)
+      // Actualizar el estado local con los nuevos datos
       setUserData(prev => ({
         ...prev,
         ...editedData
       }));
+
       setIsEditing(false);
       setSnackbarMessage('Perfil actualizado exitosamente');
       setSnackbarSeverity('success');
@@ -247,78 +259,28 @@ const ProfilePage = () => {
 
         // Crear FormData
         const formData = new FormData();
-        formData.append('image', file);
+        formData.append('file', file);
         formData.append('fileName', file.name);
-        formData.append('contentType', file.type);
-        formData.append('name', userData.name);
-        formData.append('lastName', userData.lastName);
-        formData.append('email', userData.email);
-        formData.append('backupEmail', userData.backupEmail);
-        formData.append('numberPhone', userData.numberPhone);
-        formData.append('documentType', userData.documentType);
-
-        console.log('Datos a enviar:', Object.fromEntries(formData));
 
         // Subir la imagen
-        const imageResponse = await fetch(`${DATABASE_URL}/api/Collaborator/PutImages`, {
+        const response = await fetch(`${DATABASE_URL}/api/Collaborator/upload-photo/${userData.id}`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            // No incluir Content-Type, dejamos que el navegador lo establezca con el boundary correcto
+            'Authorization': `Bearer ${accessToken}`
           },
           body: formData
         });
 
-        // Agregar logs para depuración
-        console.log('URL:', `${DATABASE_URL}/api/Collaborator/PutImages`);
-        console.log('Status:', imageResponse.status);
-        console.log('Headers:', {
-          'Authorization': `Bearer ${accessToken}`
-        });
-
-        const responseText = await imageResponse.text();
-        console.log('Respuesta completa:', responseText);
-
-        if (!imageResponse.ok) {
-          try {
-            const errorData = JSON.parse(responseText);
-            throw new Error(errorData.message || 'Error al subir la imagen');
-          } catch (e) {
-            throw new Error(`Error al subir la imagen. Status: ${imageResponse.status}. Response: ${responseText}`);
-          }
+        if (!response.ok) {
+          throw new Error('Error al subir la imagen');
         }
 
-        // Obtener la ruta de la imagen
-        const imagePath = responseText;
-
-        // Actualizar el perfil con la nueva ruta de la imagen
-        const updateResponse = await fetch(`${DATABASE_URL}/api/Collaborator/27`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            ...userData,
-            photo: imagePath
-          })
-        });
-
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text();
-          console.error('Error en la actualización del perfil:', errorText);
-          try {
-            const errorData = JSON.parse(errorText);
-            throw new Error(errorData.message || 'Error al actualizar el perfil con la nueva imagen');
-          } catch (e) {
-            throw new Error('Error al actualizar el perfil con la nueva imagen');
-          }
-        }
-
-        // Actualizar el estado local
+        const imageUrl = await response.text();
+        
+        // Actualizar el estado local con la nueva URL de la imagen
         setUserData(prev => ({
           ...prev,
-          photo: imagePath
+          photo: imageUrl
         }));
 
         setSnackbarMessage('Imagen de perfil actualizada exitosamente');
@@ -326,8 +288,8 @@ const ProfilePage = () => {
         setOpenSnackbar(true);
 
       } catch (error) {
-        console.error('Error completo:', error);
-        setSnackbarMessage(error.message || 'Error al actualizar la imagen de perfil');
+        console.error('Error:', error);
+        setSnackbarMessage('Error al actualizar la imagen de perfil');
         setSnackbarSeverity('error');
         setOpenSnackbar(true);
       } finally {
@@ -336,106 +298,108 @@ const ProfilePage = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <Typography color="error">{error}</Typography>
-      </Box>
-    );
-  }
+  if (loading) return <CircularProgress />;
+  if (error) return <Alert severity="error">{error}</Alert>;
+  if (!userData) return <Alert severity="info">No se encontraron datos del usuario</Alert>;
 
   return (
-    <Box className="relative p-6">
+    <Box sx={commonStyles.pageContainer}>
       <PageBackground />
-      <Typography 
-        variant="h4" 
-        sx={{ 
-          mb: 4,
-          background: 'linear-gradient(to right, #9333ea, #ec4899)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          fontWeight: 'bold'
-        }}
-      >
+      <Typography variant="h4" sx={commonStyles.pageTitle}>
         Mi Perfil
       </Typography>
 
-      <Paper 
-        sx={{ 
-          p: 4,
-          background: 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(12px)',
-          borderRadius: 2,
-          boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-          border: '1px solid rgba(255, 255, 255, 0.18)',
-        }}
-      >
+      <Paper sx={{
+        ...commonStyles.tableContainer,
+        padding: 4,
+        marginTop: 2
+      }}>
         <Grid container spacing={4}>
           {/* Columna de la foto */}
-          <Grid item xs={12} md={4} sx={{ textAlign: 'center' }}>
-            <Box sx={{ position: 'relative' }}>
-              <Avatar
-                sx={{ 
-                  width: 120, 
-                  height: 120,
-                  border: '4px solid rgba(255, 255, 255, 0.6)',
-                  boxShadow: '0 0 20px rgba(241, 230, 254, 0.4)',
-                }}
-                src={userData?.photo || 'https://via.placeholder.com/150'}
-              />
-              <label htmlFor="upload-photo">
-                <input
-                  style={{ display: 'none' }}
-                  id="upload-photo"
-                  name="upload-photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                />
-                <IconButton
-                  component="span"
-                  sx={{
-                    position: 'absolute',
-                    bottom: 0,
-                    right: 0,
-                    backgroundColor: '#6366f1',
-                    '&:hover': {
-                      backgroundColor: '#4f46e5',
-                    },
-                  }}
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <CircularProgress size={24} sx={{ color: 'white' }} />
-                  ) : (
-                    <CameraAltIcon sx={{ color: 'white' }} />
-                  )}
-                </IconButton>
-              </label>
+          <Grid item xs={12} md={4}>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              gap: 2,
+              position: 'relative'
+            }}>
+              <Box sx={{ 
+                position: 'relative',
+                width: 200,
+                height: 200,
+                marginBottom: 2
+              }}>
+                <Box sx={{
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  boxShadow: 3,
+                  border: '4px solid white',
+                  position: 'relative'
+                }}>
+                  <Avatar
+                    src={userData?.photo || '/default-avatar.png'}
+                    alt={`${userData?.name} ${userData?.lastName}`}
+                    sx={{ 
+                      width: '100%',
+                      height: '100%'
+                    }}
+                  />
+                </Box>
+                <label htmlFor="upload-photo">
+                  <input
+                    style={{ display: 'none' }}
+                    id="upload-photo"
+                    name="upload-photo"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    disabled={uploading}
+                  />
+                  <IconButton
+                    component="span"
+                    sx={{
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      backgroundColor: 'primary.main',
+                      color: 'white',
+                      '&:hover': {
+                        backgroundColor: 'primary.dark',
+                      },
+                      boxShadow: 2,
+                      width: 40,
+                      height: 40,
+                      transform: 'translate(20%, 20%)',
+                      zIndex: 1
+                    }}
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <CircularProgress size={24} color="inherit" />
+                    ) : (
+                      <CameraAltIcon sx={{ fontSize: 20 }} />
+                    )}
+                  </IconButton>
+                </label>
+              </Box>
+              <Typography variant="h5" sx={{ textAlign: 'center' }}>
+                {userData?.name} {userData?.lastName}
+              </Typography>
+              <Typography variant="body1" color="textSecondary" sx={{ textAlign: 'center' }}>
+                {userData?.email}
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => setOpenPasswordDialog(true)}
+                startIcon={<LockIcon />}
+                sx={commonStyles.actionButton}
+              >
+                Cambiar Contraseña
+              </Button>
             </Box>
-            <Button
-              variant="outlined"
-              onClick={() => setOpenPasswordDialog(true)}
-              sx={{
-                mt: 2,
-                borderColor: '#6366f1',
-                color: '#6366f1',
-                '&:hover': {
-                  borderColor: '#4f46e5',
-                  backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                }
-              }}
-            >
-              Cambiar Contraseña
-            </Button>
           </Grid>
 
           {/* Columna de la información */}
@@ -463,7 +427,7 @@ const ProfilePage = () => {
                 <TextField
                   fullWidth
                   label="Documento"
-                  value={userData?.documentNamber || ''}
+                  value={userData?.documentNumber || ''}
                   disabled
                   sx={{ mb: 2 }}
                 />
@@ -514,7 +478,7 @@ const ProfilePage = () => {
                 <TextField
                   fullWidth
                   label="Rol"
-                  value={userData?.role || ''}
+                  value={userRole}
                   disabled
                   sx={{ mb: 2 }}
                 />
@@ -581,145 +545,64 @@ const ProfilePage = () => {
         open={openPasswordDialog} 
         onClose={() => setOpenPasswordDialog(false)}
         PaperProps={{
-          sx: {
-            borderRadius: 2,
-            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-            border: '1px solid rgba(255, 255, 255, 0.18)',
-            background: 'rgba(255, 255, 255, 0.9)',
-            backdropFilter: 'blur(8px)',
-            p: 2
-          }
+          sx: commonStyles.dialog.paper
         }}
-        maxWidth="sm"
-        fullWidth
       >
-        <DialogTitle sx={{ 
-          textAlign: 'center',
-          color: '#6366f1',
-          fontWeight: 'bold',
-          pb: 3
-        }}>
-          Cambiar Contraseña
-        </DialogTitle>
+        <DialogTitle>Cambiar Contraseña</DialogTitle>
         <DialogContent>
-          <TextField
-            margin="dense"
-            name="currentPassword"
-            label="Contraseña Actual"
-            type="password"
-            fullWidth
-            value={passwordData.currentPassword}
-            onChange={handlePasswordChange}
-            error={!!passwordError}
-            sx={{
-              mb: 3,
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': {
-                  borderColor: 'rgba(99, 102, 241, 0.2)',
-                },
-                '&:hover fieldset': {
-                  borderColor: '#6366f1',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: '#6366f1',
-                },
-              },
-            }}
-          />
-          <TextField
-            margin="dense"
-            name="newPassword"
-            label="Nueva Contraseña"
-            type="password"
-            fullWidth
-            value={passwordData.newPassword}
-            onChange={handlePasswordChange}
-            error={!!passwordError}
-            sx={{
-              mb: 3,
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': {
-                  borderColor: 'rgba(99, 102, 241, 0.2)',
-                },
-                '&:hover fieldset': {
-                  borderColor: '#6366f1',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: '#6366f1',
-                },
-              },
-            }}
-          />
-          <TextField
-            margin="dense"
-            name="confirmPassword"
-            label="Confirmar Nueva Contraseña"
-            type="password"
-            fullWidth
-            value={passwordData.confirmPassword}
-            onChange={handlePasswordChange}
-            error={!!passwordError}
-            sx={{
-              mb: 2,
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': {
-                  borderColor: 'rgba(99, 102, 241, 0.2)',
-                },
-                '&:hover fieldset': {
-                  borderColor: '#6366f1',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: '#6366f1',
-                },
-              },
-            }}
-          />
-          {passwordError && (
-            <Typography 
-              color="error" 
-              variant="body2" 
-              sx={{ 
-                mt: 1,
-                textAlign: 'center',
-                fontSize: '0.875rem'
-              }}
-            >
-              {passwordError}
-            </Typography>
-          )}
+          <Box sx={commonStyles.formContainer}>
+            <TextField
+              label="Contraseña Actual"
+              type="password"
+              fullWidth
+              value={passwordData.currentPassword}
+              onChange={handlePasswordChange}
+              error={!!passwordError}
+            />
+            <TextField
+              label="Nueva Contraseña"
+              type="password"
+              fullWidth
+              value={passwordData.newPassword}
+              onChange={handlePasswordChange}
+              error={!!passwordError}
+            />
+            <TextField
+              label="Confirmar Nueva Contraseña"
+              type="password"
+              fullWidth
+              value={passwordData.confirmPassword}
+              onChange={handlePasswordChange}
+              error={!!passwordError}
+            />
+            {passwordError && (
+              <Typography 
+                color="error" 
+                variant="body2" 
+                sx={{ 
+                  mt: 1,
+                  textAlign: 'center',
+                  fontSize: '0.875rem'
+                }}
+              >
+                {passwordError}
+              </Typography>
+            )}
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ 
-          justifyContent: 'center',
-          p: 3,
-          pt: 2
-        }}>
+        <DialogActions>
           <Button 
             onClick={() => setOpenPasswordDialog(false)}
-            sx={{
-              color: '#6366f1',
-              borderColor: '#6366f1',
-              '&:hover': {
-                borderColor: '#4f46e5',
-                backgroundColor: 'rgba(99, 102, 241, 0.04)',
-              },
-              px: 4
-            }}
-            variant="outlined"
+            sx={commonStyles.actionButton}
           >
             Cancelar
           </Button>
           <Button 
             onClick={handlePasswordSubmit}
             variant="contained"
-            sx={{
-              backgroundColor: '#6366f1',
-              '&:hover': {
-                backgroundColor: '#4f46e5',
-              },
-              px: 4
-            }}
+            sx={commonStyles.actionButton}
           >
-            Cambiar Contraseña
+            Guardar Cambios
           </Button>
         </DialogActions>
       </Dialog>

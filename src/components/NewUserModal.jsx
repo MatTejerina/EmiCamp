@@ -7,6 +7,7 @@ import {
   TextField,
   Grid,
   MenuItem,
+  CircularProgress,
   Alert
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -15,6 +16,11 @@ import dayjs from 'dayjs';
 import { DATABASE_URL } from '../config/config';
 
 const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
+  const [loading, setLoading] = useState(false);
+  const [roles, setRoles] = useState([]);
+  const [companies, setCompanies] = useState([
+    { id: 1, name: 'Organización Por Defecto' } // Valor temporal mientras no hay endpoint
+  ]);
   const [formData, setFormData] = useState({
     name: '',
     lastName: '',
@@ -26,19 +32,45 @@ const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
     email: '',
     backupEmail: '',
     collaboratorTypeId: '1',
-    organizationId: '1',
+    organizationId: '1', // Valor por defecto
+    roleId: '1' // Establecemos un valor por defecto
   });
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (mode === 'edit' && selectedUser) {
-      setFormData({
-        ...selectedUser,
-        documentType: selectedUser.documentType || 'DNI',
-        collaboratorTypeId: selectedUser.collaboratorTypeId?.toString() || '1',
-        organizationId: selectedUser.organizationId?.toString() || '1',
-      });
+      // Fetch del usuario específico para edición
+      const fetchUserDetails = async () => {
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const response = await fetch(`${DATABASE_URL}/api/Collaborator/${selectedUser.id}`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Accept': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`Error al obtener detalles del usuario: ${response.status}`);
+          }
+
+          const userData = await response.json();
+          setFormData({
+            ...userData,
+            documentType: userData.documentType || 'DNI',
+            collaboratorTypeId: userData.collaboratorTypeId?.toString() || '1',
+            organizationId: userData.organizationId?.toString() || '1',
+            roleId: userData.roleId?.toString() || '1',
+            startDate: userData.startDate ? dayjs(userData.startDate) : null,
+            endDate: userData.endDate ? dayjs(userData.endDate) : null
+          });
+        } catch (error) {
+          console.error('Error al obtener detalles del usuario:', error);
+          setError(error.message);
+        }
+      };
+
+      fetchUserDetails();
     } else {
       // Reset form para modo crear
       setFormData({
@@ -49,11 +81,46 @@ const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
         numberPhone: '',
         startDate: null,
         endDate: null,
+        email: '',
+        backupEmail: '',
         collaboratorTypeId: '1',
         organizationId: '1',
+        roleId: '1'
       });
     }
   }, [mode, selectedUser, open]);
+
+  // Cargar roles y compañías al montar el componente
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!open) return;
+      
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        
+        // Solo fetch de roles por ahora
+        const rolesResponse = await fetch(`${DATABASE_URL}/api/Collaborator/GetRoles`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/json'
+          }
+        });
+
+        if (!rolesResponse.ok) {
+          throw new Error(`Error al obtener roles: ${rolesResponse.status}`);
+        }
+
+        const rolesData = await rolesResponse.json();
+        setRoles(rolesData);
+
+      } catch (error) {
+        console.error('Error detallado:', error);
+        setError(error.message);
+      }
+    };
+
+    fetchData();
+  }, [open]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -63,29 +130,67 @@ const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
     }));
   };
 
-  const handleDateChange = (newValue, field) => {
+  const handleDateChange = (date, field) => {
     setFormData(prev => ({
       ...prev,
-      [field]: newValue
+      [field]: date ? dayjs(date).format('YYYY-MM-DDTHH:mm:ss.SSSZ') : null
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+  const handleSubmit = async () => {
     try {
-      const response = await fetch(`${DATABASE_URL}/api/Collaborator`, {
-        method: 'POST',
+      setLoading(true);
+      const accessToken = localStorage.getItem('accessToken');
+      
+      // Preparar datos para enviar
+      const dataToSend = {
+        id: mode === 'edit' ? selectedUser.id : 0,
+        name: formData.name,
+        lastName: formData.lastName,
+        documentNumber: formData.documentNumber,
+        documentType: formData.documentType,
+        numberPhone: formData.numberPhone,
+        email: formData.email,
+        backupEmail: formData.backupEmail,
+        collaboratorTypeId: parseInt(formData.collaboratorTypeId),
+        organizationId: parseInt(formData.organizationId),
+        roleId: parseInt(formData.roleId),
+        startDate: formData.startDate ? dayjs(formData.startDate).format('YYYY-MM-DDTHH:mm:ss.SSSZ') : null,
+        endDate: formData.endDate ? dayjs(formData.endDate).format('YYYY-MM-DDTHH:mm:ss.SSSZ') : null
+      };
+
+      const url = mode === 'edit' 
+        ? `${DATABASE_URL}/api/Collaborator/${selectedUser.id}`
+        : `${DATABASE_URL}/api/Collaborator`;
+      
+      const method = mode === 'edit' ? 'PUT' : 'POST';
+
+      console.log('Enviando datos:', dataToSend); // Para debugging
+
+      const response = await fetch(url, {
+        method: method,
         headers: {
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          'Accept': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(dataToSend)
       });
 
-      // ... resto del código ...
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`Error al ${mode === 'edit' ? 'actualizar' : 'crear'} usuario: ${response.status}. ${errorData}`);
+      }
+
+      onClose();
+      if (onSubmit) {
+        await onSubmit();
+      }
     } catch (error) {
-      // ... manejo de errores ...
+      console.error('Error detallado:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -102,6 +207,11 @@ const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
          'Ver Usuario'}
       </DialogTitle>
       <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         <Grid container spacing={2} sx={{ mt: 1 }}>
           <Grid item xs={12} md={6}>
             <TextField
@@ -166,14 +276,14 @@ const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
           <Grid item xs={12} md={6}>
             <DatePicker
               label="Fecha de inicio"
-              disabled={mode === 'view'}
-              value={mode === 'create' ? formData.startDate : selectedUser?.startDate ? dayjs(selectedUser.startDate) : null}
-              onChange={(newValue) => handleDateChange(newValue, 'startDate')}
-              slotProps={{ 
-                textField: { 
+              value={formData.startDate ? dayjs(formData.startDate) : null}
+              onChange={(date) => handleDateChange(date, 'startDate')}
+              slotProps={{
+                textField: {
                   fullWidth: true,
-                  required: true 
-                } 
+                  required: true,
+                  error: !formData.startDate && Boolean(error)
+                }
               }}
             />
           </Grid>
@@ -217,25 +327,50 @@ const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
           </Grid>
           <Grid item xs={12} md={6}>
             <TextField
-              name="organizationId"
               select
-              label="Compañía"
               fullWidth
-              disabled={mode === 'view'}
-              value={formData.organizationId || '1'}
+              label="Compañía"
+              name="organizationId"
+              value={formData.organizationId}
               onChange={handleInputChange}
               required
+              error={!formData.organizationId && Boolean(error)}
             >
-              <MenuItem value="1">Empresa A</MenuItem>
-              <MenuItem value="2">Empresa B</MenuItem>
+              {companies.length > 0 ? (
+                companies.map((company) => (
+                  <MenuItem key={company.id} value={company.id.toString()}>
+                    {company.name}
+                    {company.descripcion && ` - ${company.descripcion}`}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem disabled>No hay compañías disponibles</MenuItem>
+              )}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              select
+              fullWidth
+              label="Rol"
+              name="roleId"
+              value={formData.roleId}
+              onChange={handleInputChange}
+              required
+              error={!formData.roleId && Boolean(error)}
+            >
+              {roles.length > 0 ? (
+                roles.map((role) => (
+                  <MenuItem key={role.id} value={role.id.toString()}>
+                    {role.description}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem disabled>No hay roles disponibles</MenuItem>
+              )}
             </TextField>
           </Grid>
         </Grid>
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>
@@ -247,7 +382,7 @@ const NewUserModal = ({ open, onClose, mode, selectedUser, onSubmit }) => {
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? 'Guardando...' : 'Guardar'}
+            {loading ? <CircularProgress size={24} /> : 'Guardar'}
           </Button>
         )}
       </DialogActions>

@@ -54,8 +54,6 @@ const RecoverPasswordModal = ({ isOpen, onClose }) => {
         return;
       }
 
-      console.log('Token encontrado:', accessToken);
-
       const response = await fetch(`${DATABASE_URL}/api/Auth/recover-password`, {
         method: 'POST',
         headers: {
@@ -337,43 +335,51 @@ const LoginPage = () => {
     handleCallback();
   }, [location, navigate]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Validaciones
-    const errors = {
+  // Validación de campos
+  const validateForm = () => {
+    let isValid = true;
+    const newErrors = {
       userName: '',
       password: ''
     };
-    let isValid = true;
 
+    // Validación userName
     if (!formData.userName.trim()) {
-      errors.userName = 'El usuario es requerido';
+      newErrors.userName = 'El nombre de usuario es requerido';
       isValid = false;
     }
 
+    // Validación password
     if (!formData.password) {
-      errors.password = 'La contraseña es requerida';
+      newErrors.password = 'La contraseña es requerida';
       isValid = false;
     } else if (formData.password.length < 6) {
-      errors.password = 'La contraseña debe tener al menos 6 caracteres';
+      newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
       isValid = false;
+    // } else if (!/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/.test(formData.password)) {
+    //   newErrors.password = 'La contraseña debe combinar números y letras';
+    //   isValid = false;
     }
 
-    if (!isValid) {
-      setErrors(errors);
+    setErrors(newErrors);
+    return isValid;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
       return;
     }
 
-    setLoading(true);
-    setError('');
-
     try {
+      setLoading(true);
+      setError('');
+
       const response = await fetch(`${DATABASE_URL}/api/Auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
         },
         body: JSON.stringify({
           userName: formData.userName,
@@ -383,10 +389,14 @@ const LoginPage = () => {
 
       if (response.ok) {
         const data = await response.json();
-        
-        // Guardar solo los tokens necesarios
         localStorage.setItem('accessToken', data.accessToken);
         localStorage.setItem('idToken', data.idToken);
+        
+        if (rememberMe) {
+          localStorage.setItem('rememberedUser', formData.userName);
+        } else {
+          localStorage.removeItem('rememberedUser');
+        }
         
         navigate('/dashboard');
       } else {

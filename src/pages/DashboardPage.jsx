@@ -23,6 +23,9 @@ import {
   TextField,
   Button,
   CircularProgress,
+  Grid,
+  Paper,
+  Badge,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -31,6 +34,9 @@ import {
   Business as BusinessIcon,
   Logout as LogoutIcon,
   CameraAlt as CameraAltIcon,
+  Dashboard as DashboardIcon,
+  Notifications as NotificationsIcon,
+  NotificationsActive as NotificationsActiveIcon,
 } from '@mui/icons-material';
 
 const drawerWidth = 240;
@@ -46,6 +52,23 @@ const DashboardPage = () => {
   const [openProfileModal, setOpenProfileModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [notifications, setNotifications] = useState([
+    {
+      id: 1,
+      title: 'Nueva tarea asignada',
+      message: 'Se te ha asignado una nueva tarea en el proyecto',
+      read: false,
+      timestamp: '2024-03-20T10:00:00'
+    },
+    {
+      id: 2,
+      title: 'Recordatorio',
+      message: 'Reunión de equipo en 30 minutos',
+      read: false,
+      timestamp: '2024-03-20T09:30:00'
+    }
+  ]);
+  const [openNotifications, setOpenNotifications] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -134,6 +157,7 @@ const DashboardPage = () => {
   };
 
   const menuItems = [
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
     { text: 'Perfil', icon: <PersonIcon />, path: '/dashboard/profile' },
     { text: 'Usuarios', icon: <PeopleIcon />, path: '/dashboard/users' },
     { text: 'Organización', icon: <BusinessIcon />, path: '/dashboard/organization' },
@@ -310,6 +334,7 @@ const DashboardPage = () => {
             noWrap 
             component="div"
             sx={{
+              flexGrow: 1,
               background: 'linear-gradient(to right, #a78bfa, #f0abfc)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -318,6 +343,13 @@ const DashboardPage = () => {
           >
             Dashboard
           </Typography>
+          <IconButton color="inherit" onClick={() => setOpenNotifications(true)}>
+            <Badge badgeContent={notifications.filter(n => !n.read).length} color="error">
+              {notifications.filter(n => !n.read).length > 0 ? 
+                <NotificationsActiveIcon sx={{ color: '#a78bfa' }} /> : 
+                <NotificationsIcon sx={{ color: '#a78bfa' }} />}
+            </Badge>
+          </IconButton>
         </Toolbar>
       </AppBar>
       
@@ -372,7 +404,100 @@ const DashboardPage = () => {
         }}
       >
         <Toolbar />
-        <Outlet />
+        {location.pathname === '/dashboard' ? (
+          <Box>
+            {/* Resumen */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 3,
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ mb: 2 }}>Tareas Pendientes</Typography>
+                  <Typography variant="h3" sx={{ color: '#a78bfa' }}>12</Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 3,
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ mb: 2 }}>En Progreso</Typography>
+                  <Typography variant="h3" sx={{ color: '#f0abfc' }}>5</Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 3,
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ mb: 2 }}>Completadas</Typography>
+                  <Typography variant="h3" sx={{ color: '#86efac' }}>8</Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {/* Kanban simplificado */}
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: 2,
+                    minHeight: 400,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ mb: 2, color: '#666' }}>Por Hacer</Typography>
+                  {/* Aquí irían las tarjetas de tareas */}
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: 2,
+                    minHeight: 400,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ mb: 2, color: '#666' }}>En Progreso</Typography>
+                  {/* Aquí irían las tarjetas de tareas */}
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: 2,
+                    minHeight: 400,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ mb: 2, color: '#666' }}>Completado</Typography>
+                  {/* Aquí irían las tarjetas de tareas */}
+                </Paper>
+              </Grid>
+            </Grid>
+          </Box>
+        ) : (
+          <Outlet />
+        )}
       </Box>
       
       <Dialog
@@ -468,6 +593,68 @@ const DashboardPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenProfileModal(false)}>
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openNotifications}
+        onClose={() => setOpenNotifications(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            background: 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: 2,
+            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+          }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ 
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            background: 'linear-gradient(to right, #6366f1, #a855f7)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            fontWeight: 'bold'
+          }}>
+            <NotificationsIcon /> Notificaciones
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <List>
+            {notifications.map((notification) => (
+              <ListItem 
+                key={notification.id}
+                sx={{
+                  bgcolor: notification.read ? 'transparent' : 'rgba(241, 230, 254, 0.2)',
+                  borderRadius: 1,
+                  mb: 1,
+                }}
+              >
+                <ListItemText
+                  primary={notification.title}
+                  secondary={
+                    <>
+                      <Typography variant="body2" color="text.secondary">
+                        {notification.message}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(notification.timestamp).toLocaleString()}
+                      </Typography>
+                    </>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenNotifications(false)}>
             Cerrar
           </Button>
         </DialogActions>

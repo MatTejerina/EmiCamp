@@ -3,6 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { TextField } from '@mui/material';
 import { GoogleLogin } from '@react-oauth/google';
 import { DATABASE_URL } from '../config/config';
+import ChangePasswordModal from '../components/ChangePasswordModal';
+
+
+
+
 
 const RecoverPasswordModal = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState('');
@@ -365,7 +370,10 @@ const LoginPage = () => {
     return isValid;
   };
 
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+
   const handleSubmit = async (e) => {
+
     e.preventDefault();
     
     if (!validateForm()) {
@@ -397,8 +405,16 @@ const LoginPage = () => {
         } else {
           localStorage.removeItem('rememberedUser');
         }
-        
-        navigate('/dashboard');
+        const tokenPayload = JSON.parse(atob(data.accessToken.split('.')[1]));
+
+        const isGenericPassword = tokenPayload.isGenericPassword === "True";
+
+
+        if (isGenericPassword) {
+          setShowChangePasswordModal(isGenericPassword); 
+        } else {
+          navigate('/dashboard'); 
+        }
       } else {
         if (response.status === 401) {
           setError('Usuario o contraseña incorrectos');
@@ -409,11 +425,34 @@ const LoginPage = () => {
       }
     } catch (err) {
       console.error('Error:', err);
-      setError('Error al conectar con el servidor');
-    } finally {
+      setError('Error al conectar con el servidor');    } finally {
       setLoading(false);
     }
   };
+
+  const handlePasswordChange = async ({ email, currentPassword, newPassword }) => {
+    try {
+      const response = await fetch(`${DATABASE_URL}/api/User/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify({ email, currentPassword , newPassword }),
+      });
+  
+      if (response.ok) {
+        setShowChangePasswordModal(false); // Cierra el modal
+        navigate('/dashboard'); // Redirige al dashboard
+      } else {
+        const errorData = await response.json();
+        console.error('Error al cambiar contraseña:', errorData.message);
+      }
+    } catch (err) {
+      console.error('Error al conectar con el servidor:', err);
+    }
+  };
+  
 
   // Cargar usuario recordado al montar el componente
   useEffect(() => {
@@ -547,6 +586,14 @@ const LoginPage = () => {
           </div>
         </div>
       </div>
+
+      <ChangePasswordModal
+        show={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+        onPasswordChange={handlePasswordChange}
+        isGenericPassword={true}
+      />
+
 
       <RecoverPasswordModal
         isOpen={isRecoverModalOpen}

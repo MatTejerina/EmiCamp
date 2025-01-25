@@ -38,6 +38,7 @@ import {
   Notifications as NotificationsIcon,
   NotificationsActive as NotificationsActiveIcon,
 } from '@mui/icons-material';
+import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 
 const drawerWidth = 240;
 
@@ -52,26 +53,55 @@ const DashboardPage = () => {
   const [openProfileModal, setOpenProfileModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: 'Nueva tarea asignada',
-      message: 'Se te ha asignado una nueva tarea en el proyecto',
-      read: false,
-      timestamp: '2024-03-20T10:00:00'
-    },
-    {
-      id: 2,
-      title: 'Recordatorio',
-      message: 'Reunión de equipo en 30 minutos',
-      read: false,
-      timestamp: '2024-03-20T09:30:00'
-    }
-  ]);
+  const [notifications, setNotifications] = useState([]);
   const [openNotifications, setOpenNotifications] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const [connection, setConnection] = useState(null);
 
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken');
+
+    // Configurar la conexión con SignalR
+    const newConnection = new HubConnectionBuilder()
+      .withUrl(`${DATABASE_URL}/notificationHub`, {
+        accessTokenFactory: () => accessToken,
+      })
+      .configureLogging(LogLevel.Information)
+      .withAutomaticReconnect()
+      .build();
+
+    setConnection(newConnection);
+
+    return () => {
+      if (connection) {
+        connection.stop(); // Detén la conexión cuando el componente se desmonte
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (connection) {
+      connection
+        .start()
+        .then(() => {
+          console.log('Conexión SignalR establecida.');
+
+          // Escucha eventos desde el backend
+          connection.on('ReceiveNotification', (notification) => {
+            setNotifications((prev) => [...prev, notification]);
+          });
+
+          // También puedes escuchar eventos para otras funcionalidades
+          connection.on('NotificationRead', (notificationId) => {
+            setNotifications((prev) =>
+              prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+            );
+          });
+        })
+        .catch((error) => console.error('Error al conectar con SignalR:', error));
+    }
+  }, [connection]);
   useEffect(() => {
     const idToken = localStorage.getItem('idToken');
     if (idToken) {
@@ -598,67 +628,52 @@ const DashboardPage = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog
-        open={openNotifications}
-        onClose={() => setOpenNotifications(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            background: 'rgba(255, 255, 255, 0.9)',
-            backdropFilter: 'blur(12px)',
-            borderRadius: 2,
-            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-          }
-        }}
-      >
+      <Dialog open={openNotifications} onClose={() => setOpenNotifications(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          <Box sx={{ 
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            background: 'linear-gradient(to right, #6366f1, #a855f7)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            fontWeight: 'bold'
-          }}>
-            <NotificationsIcon /> Notificaciones
-          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+            Notificaciones
+          </Typography>
         </DialogTitle>
         <DialogContent>
-          <List>
-            {notifications.map((notification) => (
-              <ListItem 
-                key={notification.id}
-                sx={{
-                  bgcolor: notification.read ? 'transparent' : 'rgba(241, 230, 254, 0.2)',
-                  borderRadius: 1,
-                  mb: 1,
-                }}
-              >
-                <ListItemText
-                  primary={notification.title}
-                  secondary={
-                    <>
-                      <Typography variant="body2" color="text.secondary">
-                        {notification.message}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(notification.timestamp).toLocaleString()}
-                      </Typography>
-                    </>
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
+          {notifications.length > 0 ? (
+            <List>
+              {notifications.map((notification) => (
+                <ListItem
+                  key={notification.id}
+                  sx={{
+                    bgcolor: notification.read ? 'transparent' : 'rgba(241, 230, 254, 0.2)',
+                    borderRadius: 1,
+                    mb: 1,
+                  }}
+                  onClick={() => markNotificationAsRead(notification.id)} // Conecta con el endpoint si es necesario
+                >
+                  <ListItemText
+                    primary={notification.title}
+                    secondary={
+                      <>
+                        <Typography variant="body2" color="text.secondary">
+                          {notification.message}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(notification.timestamp).toLocaleString()}
+                        </Typography>
+                      </>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No hay notificaciones.
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenNotifications(false)}>
-            Cerrar
-          </Button>
+          <Button onClick={() => setOpenNotifications(false)}>Cerrar</Button>
         </DialogActions>
       </Dialog>
+
     </Box>
   );
 };

@@ -21,6 +21,8 @@ import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import { DATABASE_URL } from '../config/config';
 import LockIcon from '@mui/icons-material/Lock';
 import { commonStyles } from '../styles/commonStyles';
+import ChangePasswordModal from '../components/ChangePasswordModal';
+
 
 const ProfilePage = () => {
   const [userData, setUserData] = useState(null);
@@ -44,6 +46,7 @@ const ProfilePage = () => {
   });
   const [isEditing, setIsEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -97,76 +100,26 @@ const ProfilePage = () => {
     }
   }, [userData]);
 
-  const handlePasswordChange = (e) => {
-    const { name, value } = e.target;
-    setPasswordData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    setPasswordError('');
-  };
 
-  const handlePasswordSubmit = async () => {
+  const handlePasswordChange = async ({ email, currentPassword, newPassword }) => {
     try {
-      // Validar que las contraseñas coincidan
-      if (passwordData.newPassword !== passwordData.confirmPassword) {
-        setPasswordError('Las contraseñas nuevas no coinciden');
-        return;
-      }
-
-      // Validar que la contraseña no esté vacía
-      if (!passwordData.currentPassword || !passwordData.newPassword) {
-        setPasswordError('Todos los campos son obligatorios');
-        return;
-      }
-
-      const accessToken = localStorage.getItem('accessToken');
-      const idToken = localStorage.getItem('idToken');
-      
-      if (!accessToken || !idToken) {
-        throw new Error('No se encontraron los tokens de autenticación');
-      }
-
-      // Obtener el email del token
-      const tokenPayload = JSON.parse(atob(idToken.split('.')[1]));
-      const userEmail = tokenPayload.email;
-
       const response = await fetch(`${DATABASE_URL}/api/User/change-password`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
-        body: JSON.stringify({
-          email: userEmail,
-          currentPassword: passwordData.currentPassword,
-          newPassword: passwordData.newPassword
-        })
+        body: JSON.stringify({ email, currentPassword , newPassword }),
       });
-
-      if (!response.ok) {
+  
+      if (response.ok) {
+        setShowChangePasswordModal(false); // Cierra el modal
+      } else {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Error al cambiar la contraseña');
+        console.error('Error al cambiar contraseña:', errorData.message);
       }
-
-      // Limpiar el formulario y cerrar el diálogo
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
-      setOpenPasswordDialog(false);
-      
-      // Mostrar mensaje de éxito con Snackbar
-      setSnackbarMessage('Contraseña actualizada exitosamente');
-      setSnackbarSeverity('success');
-      setOpenSnackbar(true);
-
-    } catch (error) {
-      setPasswordError(error.message || 'Error al cambiar la contraseña');
-      setSnackbarMessage(error.message || 'Error al cambiar la contraseña');
-      setSnackbarSeverity('error');
-      setOpenSnackbar(true);
+    } catch (err) {
+      console.error('Error al conectar con el servidor:', err);
     }
   };
 
@@ -393,12 +346,12 @@ const ProfilePage = () => {
               </Typography>
               <Button
                 variant="contained"
-                onClick={() => setOpenPasswordDialog(true)}
+                onClick={() => setShowChangePasswordModal(true)}
                 startIcon={<LockIcon />}
                 sx={commonStyles.actionButton}
-              >
+            >
                 Cambiar Contraseña
-              </Button>
+            </Button>
             </Box>
           </Grid>
 
@@ -541,71 +494,13 @@ const ProfilePage = () => {
       </Paper>
 
       {/* Diálogo de cambio de contraseña */}
-      <Dialog 
-        open={openPasswordDialog} 
-        onClose={() => setOpenPasswordDialog(false)}
-        PaperProps={{
-          sx: commonStyles.dialog.paper
-        }}
-      >
-        <DialogTitle>Cambiar Contraseña</DialogTitle>
-        <DialogContent>
-          <Box sx={commonStyles.formContainer}>
-            <TextField
-              label="Contraseña Actual"
-              type="password"
-              fullWidth
-              value={passwordData.currentPassword}
-              onChange={handlePasswordChange}
-              error={!!passwordError}
-            />
-            <TextField
-              label="Nueva Contraseña"
-              type="password"
-              fullWidth
-              value={passwordData.newPassword}
-              onChange={handlePasswordChange}
-              error={!!passwordError}
-            />
-            <TextField
-              label="Confirmar Nueva Contraseña"
-              type="password"
-              fullWidth
-              value={passwordData.confirmPassword}
-              onChange={handlePasswordChange}
-              error={!!passwordError}
-            />
-            {passwordError && (
-              <Typography 
-                color="error" 
-                variant="body2" 
-                sx={{ 
-                  mt: 1,
-                  textAlign: 'center',
-                  fontSize: '0.875rem'
-                }}
-              >
-                {passwordError}
-              </Typography>
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button 
-            onClick={() => setOpenPasswordDialog(false)}
-            sx={commonStyles.actionButton}
-          >
-            Cancelar
-          </Button>
-          <Button 
-            onClick={handlePasswordSubmit}
-            variant="contained"
-            sx={commonStyles.actionButton}
-          >
-            Guardar Cambios
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ChangePasswordModal
+        show={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+        onPasswordChange={handlePasswordChange}
+        isGenericPassword={false}
+      />
+
 
       {/* Snackbar para mensajes */}
       <Snackbar 

@@ -1,1 +1,1 @@
-export const DATABASE_URL = 'http://localhost:5095';
+export const DATABASE_URL = 'https://localhost:44328';

@@ -12,6 +12,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@microsoft/signalr": "^8.0.7",
     "@mui/icons-material": "^6.3.1",
     "@mui/material": "^6.3.1",
     "@mui/x-date-pickers": "^7.24.0",
@@ -20,6 +21,8 @@
     "bootstrap": "^5.3.3",
     "dayjs": "^1.11.13",
     "firebase": "^11.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwt-decode": "^4.0.0",
     "react": "^18.3.1",
     "react-bootstrap": "^2.10.7",
     "react-dom": "^18.3.1",
